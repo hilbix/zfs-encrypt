@@ -11,6 +11,7 @@ o() { "$@" || OOPS fail $?: "$@"; }
 t() { "$@"; exit; }
 v() { local -n __VAR__="$1"; __VAR__="$("${@:2}")"; }
 ov() { v "$@" || OOPS fail $? setting "$1" from: "${@:2}"; }
+NOTYET() { OOPS not yet implemented; }
 
 export LC_ALL=C.UTF-8
 
@@ -77,7 +78,7 @@ passphrase()
 {
   read -srp "${*:2}: " "$1" || OOPS EOF
   echo
-  pass="$(printf %s "${!1}" | sha256sum -)" 
+  pass="$(printf %s "${!1}" | sha256sum -)"
   pass="${pass%% *}"
 }
 
@@ -137,12 +138,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM;
 def D(s): return bytes.fromhex(s);
 aes  = AESGCM(D(sys.argv[1]));
 for a in sys.argv[2:]:
-	nonce,data = a.split(":");
-	try:
-		print(aes.decrypt(D(nonce),D(data),None).decode("utf-8"));
-		break;
-	except:
-		pass;
+        nonce,data = a.split(":");
+        try:
+                print(aes.decrypt(D(nonce),D(data),None).decode("utf-8"));
+                break;
+        except:
+                pass;
 ' "$@"
 }
 
@@ -162,80 +163,81 @@ Recommendation: Use ZFS pool wide slots, not on individual ZFS datasets.
 
 Manage interactively (needs a TTY):
 
-	$0 pool
+        $0 pool
 
 Automatic load keys from file or passphrase:
 
-	$0 pool <file
-	$0 pool <<<'passphrase'
+        $0 pool <file
+        $0 pool <<<'passphrase'
 
 Prompt for passphrase and load keys:
 
-	$0 pool | zfs load-key -L prompt pool
+        $0 pool | zfs load-key -L prompt pool
 
 Prompt for passphrase and output the real single zfs passphrase
 (Danger!  DO NOT LET OTHERS SEE THIS OUTPUT!):
 
-	$0 pool | cat
+        $0 pool | cat
 
 Create encrypted zfs volume (on existing but non-encrypted pool):
 
-	$0 pool/path
+        $0 pool/path
 
 Create a new fully encrypted pool:
 
-	$0 pool vdev..
+        $0 pool vdev..
 
 The latter is needed as following cannot work (pool is missing):
 
-	$0 pool | zpool create $OPTIONS pool vdev..
+        $0 pool | zpool create $OPTIONS pool vdev..
 
 If you need another ashift, use
 
-	ASHIFT=N $0 pool vdev..
+        ASHIFT=N $0 pool vdev..
 
 To set options (yes, this is a hack), use /bin/bash with something like:
 
-	printf -v ASHIFT '%q ' 12 options..
-	ASHIFT="$ASHIFT" $0 pool vdev..
+        printf -v ASHIFT '%q ' 12 options..
+        ASHIFT="$ASHIFT" $0 pool vdev..
 
 EOF
 
   get-slots
-  
+
   case " $slots " in
   ('  ')
-	STDERR there are currently no slots defined
-	slot-default && get-slots
-  	echo
-	;;
+        STDERR there are currently no slots defined
+        slot-default && get-slots
+        echo
+        ;;
   (*' recovery '*)	;;
   (*)	STDERR there is no recovery slot defined
-	slot-auto recovery && get-slots
-  	echo
-	;;
+        slot-auto recovery && get-slots
+        echo
+        ;;
   esac
 
   PS3=$'\n'"Enter which slot to manage: "
   echo
   select ACT in "create new slot" "exit this script" $slots
   do
-  	case "$ACT" in
-	('create new slot')	slot-new;;
-	('exit this script')	exit;;
-	('')			slot-new "$REPLY";;
-	(*) case " $slots " in
-	(*" $ACT "*)	slot-edit "$ACT";;
-	(*)		slot-new "$REPLY";;
-	esac
-	esac
-	echo
+        case "$ACT" in
+        ('create new slot')	slot-new;;
+        ('exit this script')	exit;;
+        ('')			slot-new "$REPLY";;
+        (*) case " $slots " in
+        (*" $ACT "*)	slot-edit "$ACT";;
+        (*)		slot-new "$REPLY";;
+        esac
+        esac
+        echo
   done
 }
 
 slot-default()
 {
   passphrase P enter passphrase of current pool
+  NOTYET
 }
 
 slot-auto()
@@ -246,6 +248,7 @@ This creates a slot named "$1" with a passphrase which should be copied somewher
 
 EOF
   prompt hint enter some hint where you will hide this key || return
+  NOTYET
 }
 
 slot-new()
@@ -258,11 +261,13 @@ slot-new()
   esac
 
   passphrase P enter passphrase 'for' existing slot:
+  NOTYET
 }
 
 slot-edit()
 {
   STDOUT editing "$1"
+  NOTYET
 }
 
 get-seed-slot()
@@ -281,17 +286,17 @@ zfs-create()
   parent="${POOL%/*}"
   if	get-encroot "$parent"
   then
-	if	get-keystatus "$parent" ||
-		{
-		STDERR please load key of "$parent"
-		v parentkey "$0" "${POOL%/*}" &&
-		x $SUDO zfs load-key -L prompt "$parent" <<<"$parentkey"
-		} 
-	then
-		# inherit the already loaded master key from the parent
-		o $SUDO zfs create -o encryption=on "$POOL"
-		return
-	fi
+        if	get-keystatus "$parent" ||
+                {
+                STDERR please load key of "$parent"
+                v parentkey "$0" "${POOL%/*}" &&
+                x $SUDO zfs load-key -L prompt "$parent" <<<"$parentkey"
+                }
+        then
+                # inherit the already loaded master key from the parent
+                o $SUDO zfs create -o encryption=on "$POOL"
+                return
+        fi
   fi
 
   # Perhaps implement in future to reuse other encrypted keys in the ZFS hierarchy
@@ -324,13 +329,14 @@ pool-create()
   o "${CMD[@]}" -O keyslot:default="$slot" "$POOL" "$@" <<<"$seed"$'\n'"$seed"
 }
 
+# unused
 test()
 {
   pw="secret"
-  key="$(printf %s "$pw" | sha256sum -)" 
+  key="$(printf %s "$pw" | sha256sum -)"
   key="${key%% *}"
   murx=4d3b4c672af9c989931bcc70:63da575c75132b71ed1c04315087740ac0a444640fa1940f7effe6
-  
+
   printf 'KEY %q\n' "$key"
   ov hex aes-gcm-encrypt "$key" "heho world"
   ov out aes-gcm-decrypt "$key" "$murx" "$hex"
@@ -362,5 +368,4 @@ tty <&1 >/dev/null || t automatic
 
 # else drop into interactive managament mode
 t interactive
-
 
