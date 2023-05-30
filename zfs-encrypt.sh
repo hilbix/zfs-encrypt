@@ -17,9 +17,9 @@ export LC_ALL=C.UTF-8
 SUDO=
 [ 0 = "`id -u`" ] || SUDO=sudo
 
-x python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM' || OOPS python3 and python3-cryptography are needed
+python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM' || OOPS python3 and python3-cryptography are needed
 
-OPTIONS="-o ashift=${ASHIFT:-12} -o feature@encryption=enabled -O encryption=on -O keylocation=prompt -O keyformat=passphrase"
+OPTIONS="-o ashift=${ASHIFT:-12} -o feature@encryption=enabled -O encryption=on -O keyformat=passphrase"
 
 getall()
 {
@@ -52,7 +52,7 @@ get-keystatus()
 get-encroot()
 {
   ov encroot $SUDO zfs get -Ho value encryptionroot "$1"
-  case "$isenc" in
+  case "$encroot" in
   (''|'-')	return 1;;
   esac
   return 0
@@ -146,27 +146,8 @@ for a in sys.argv[2:]:
 ' "$@"
 }
 
-pool-create()
-{
-  [ ".$POOL" = ".${POOL%/*}" ] || OOPS zpool create does not support paths: "$POOL"
-
-  # eval is evil?  Needed here to expand $ASHIFT properly
-  o eval 'CMD=($SUDO zpool create '"$OPTIONS"' "$@")'
-
-  o confirm "$POOL" about to run: "${CMD[@]}"
-
-  # It's a PITA to first enter passphrases and then fail confirming
-  # Hence we do it the other way round
-  passphrase2 pool
-
-  echo -- "${CMD[@]}"
-  exit
-}
-
 automatic()
 {
-  [ -z "$*" ] || create "$@"
-
   get-keys
 }
 
@@ -284,6 +265,16 @@ slot-edit()
   STDOUT editing "$1"
 }
 
+get-seed-slot()
+{
+  passphrase2 "$@"
+
+  get-random seed
+  ov slot aes-gcm-encrypt "$pass" "$seed"
+  ov cmp  aes-gcm-decrypt "$pass" "$slot"
+  [ ".$cmp" = ".$seed" ] || OOPS internal error: encrypted data cannot be decrypted
+}
+
 zfs-create()
 {
   # Parent already is encrypted
@@ -311,14 +302,26 @@ zfs-create()
 
   STDERR WARNING: the parent cannot be used as encryption source
   STDERR WARNING: So we create a new dataset encryption root
-  passphrase2 default key slot
-
-  get-random seed
-  ov slot aes-gcm-encrypt "$pass" "$seed"
-  ov cmp  aes-gcm-decrypt "$pass" "$slot"
-  [ ".$cmp" = ".$seed" ] || OOPS internal error: encrypted data cannot be decrypted
+  get-seed-slot default key slot
 
   o $SUDO zfs create -o encryption=on -o keyformat=passphrase -o keyslot:default="$slot" "$POOL" <<<"$seed"$'\n'"$seed"
+}
+
+pool-create()
+{
+  [ ".$POOL" = ".${POOL%/*}" ] || OOPS zpool create does not support paths: "$POOL"
+
+  # eval is evil?  Needed here to expand $ASHIFT properly
+  o eval 'CMD=($SUDO zpool create '"$OPTIONS"')'
+
+  #o confirm "/$POOL/" about to run: "${CMD[@]}" "$POOL" "$@"
+  STDERR about to run: "${CMD[@]}" "$POOL" "$@"
+
+  # It is a PITA to first enter passphrases and then fail confirming
+  # Hence we do it the other way round
+  get-seed-slot default key slot
+
+  o "${CMD[@]}" -O keyslot:default="$slot" "$POOL" "$@" <<<"$seed"$'\n'"$seed"
 }
 
 test()
@@ -339,7 +342,7 @@ POOL="$1"
 [ -n "$POOL" ] && shift || OOPS must give the pool as first argument
 
 # newly create encrypted ZFS pool
-[ -z "$*" ] || t zpool-create "$@"
+[ -z "$*" ] || t pool-create "$@"
 
 # make sure argument exists and is usable
 # '/' in '$POOL' may work but is untested
@@ -349,7 +352,7 @@ o $SUDO zpool status "${POOL%%/*}" >/dev/null
 x $SUDO zfs get all "$POOL" >/dev/null || t zfs-create
 
 # This must run on some pool or dataset with encryption enabled
-isenc "$POOL" || OOPS encryption not enabled on "$POOL"
+get-encroot "$POOL" || STDERR Note: Give a ZFS dataset which is encrypted. || OOPS Encryption not enabled on dataset: "$POOL"
 
 # load keys from file or piped passphrase
 tty >/dev/null || t load-keys
