@@ -79,12 +79,17 @@ get-encroot()
 #  encroots=($encroots)
 #}
 
+set-pass()
+{
+  pass="$(printf %s "$1" | sha256sum -)"
+  pass="${pass%% *}"
+}
+
 passphrase()
 {
   read -srp "${*:2}: " "$1" || OOPS EOF
   echo
-  pass="$(printf %s "${!1}" | sha256sum -)"
-  pass="${pass%% *}"
+  set-pass "${!1}"
 }
 
 passphrase2()
@@ -332,7 +337,7 @@ pool-create()
 automatic()
 {
   get-slots
-  [ -n "$slots" ] || OOPS no keys on dataset: "$POOL"
+  [ -n "$slots" ] || OOPS no keyslots on dataset: "$POOL"
 
   retry=3
   while	STDERR known slots: $slots
@@ -349,8 +354,23 @@ automatic()
 
   printf '%s\n%s\n' "$seed" "$seed"
 
-  # According to manual, -r or -a needs -L prompt
-  # $SUDO zfs load-key -r -L prompt "$POOL"
+}
+
+load-keys()
+{
+  get-keys
+  [ -n "$keys" ] || OOPS no keyslots on dataset: "$POOL"
+
+  ok=false
+  while	read -rt60 input
+  do
+        set-pass "$input"
+        ov seed aes-gcm-decrypt "$pass" $keys
+
+        # According to manual, -r or -a needs -L prompt
+        x $SUDO zfs load-key -r -L prompt "$POOL" <<< "$seed"$'\n'"$seed" && ok=:
+  done
+  $ok || OOPS failed
 }
 
 
