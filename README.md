@@ -16,6 +16,9 @@ A shell script to manage multiple encryption keys for ZFS.
 >
 > Recommendation is to set ashift=12 even on 512 byte sector drives,
 > as future replacement drives very likely have 4096 bytes sectors.
+>
+> This is, what this script exactly does, when called with more
+> than 1 parameter.
 
 This script is only meant for pools which have a encrypted root dataset.
 
