@@ -24,18 +24,23 @@ OPTIONS="-o ashift=${ASHIFT:-12} -o feature@encryption=enabled -O encryption=on 
 
 getall()
 {
-  ov ALL $SUDO zfs get all "$POOL"
+  ov ALL $SUDO zfs get -Ho property,value all "$POOL"
   ov "$@" <<<"$ALL"
 }
 
 get-slots()
 {
-  getall slots awk '$2 ~ /^keyslot:/ { print substr($2,9) }'
+  getall slots awk '/^keyslot:/ { print substr($1,9) }'
 }
 
 get-keys()
 {
-  getall keys awk '$2 ~ /^keyslot:/ { print $3 }'
+  getall keys awk '/^keyslot:/ { print $2 }'
+}
+
+get-slot()
+{
+  getall slot $SUDO zfs get -Ho value "keyslot:$1" "$POOL"
 }
 
 # get-keystatus to see if the key is loaded
@@ -141,15 +146,10 @@ for a in sys.argv[2:]:
         nonce,data = a.split(":");
         try:
                 print(aes.decrypt(D(nonce),D(data),None).decode("utf-8"));
-                break;
+                sys.exit(0);
         except:
                 pass;
 ' "$@"
-}
-
-automatic()
-{
-  get-keys
 }
 
 interactive()
@@ -328,6 +328,31 @@ pool-create()
 
   o "${CMD[@]}" -O keyslot:default="$slot" "$POOL" "$@" <<<"$seed"$'\n'"$seed"
 }
+
+automatic()
+{
+  get-slots
+  [ -n "$slots" ] || OOPS no keys on dataset: "$POOL"
+
+  retry=3
+  while	STDERR known slots: $slots
+        passphrase p Passphrase of one of the slots to unlock "$POOL"
+
+        # Try all possible slot keys
+        get-keys
+        ov seed aes-gcm-decrypt "$pass" $keys
+        [ -z "$seed" ]
+  do
+        STDERR passphrase did not work
+        let --retry || OOPS too many failures
+  done
+
+  printf '%s\n%s\n' "$seed" "$seed"
+
+  # According to manual, -r or -a needs -L prompt
+  # $SUDO zfs load-key -r -L prompt "$POOL"
+}
+
 
 # unused
 test()
